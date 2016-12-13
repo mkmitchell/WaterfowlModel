@@ -9,16 +9,33 @@
 library(plyr)
 library("dplyr")
 
+############################################################################
 # Variable designiation
 # Workspace directory
 workspace = "D:/GIS/projects/Waterfowl model/truemet/"
+
 # Input ArcGIS Model csv file
 arcin = "Nov_15_16_table.csv"
+# CSV for cover, kg_ha (harvested and unharvested), tme, and decomp
 coverin = "cover_values.csv"
+# Foraging time vector for each habitat type based on winter water periods.
 foragetimein = "forage_time_vector.csv"
 
-#private_woody
+# Forage time vector in days
 forage_time_vector = c(1, 105, 210)
+
+# List of foraging guilds by name
+guilds = c("Dabbling Ducks")
+
+# Time vector for for guild populations
+popvector = c(1, 16, 32, 47, 62, 77, 93, 108, 124, 139, 152, 167, 183, 210)
+
+# A population curve matching the length of the population vector
+# each guild should have it's own variable name followed by an incredmental number.  guildpop1, guildpop2, guildpop3
+guildpop1 = c(143170, 401889, 836745, 1539851, 2489874, 2748556, 3127486, 3329976, 3433648, 3393342, 1802482, 881385, 881385, 881385)
+
+############################################################################
+
 # Read in data
 arcData = read.csv(paste(workspace, arcin, sep=""), header=TRUE)
 coverData = read.csv(paste(workspace, coverin, sep=""), header=TRUE)
@@ -74,8 +91,8 @@ for (i in 1:length(forage_time_vector)) {
 }
 
 # Create forage_type_avail_vectorN for each forage type.  Automatically fill that columns values based on the imported csv by forage type
-temp = subset( combined[, c("COVER_TYPE", "COVER", "TME")])
-temp = unique(temp[c('COVER_TYPE', 'COVER', 'TME')])
+temp = subset( combined[, c("COVER_TYPE", "COVER", "TME", "DECOMP")])
+temp = unique(temp[c('COVER_TYPE', 'COVER', 'TME', 'DECOMP')])
 temp = merge(temp, forageTime, by.x = "COVER_TYPE", by.y = "V1")
 outputCSV = merge(outputCSV, temp, by.x = "FORAGE_TYPE_NAME", by.y = "COVER")
 i = 0
@@ -93,6 +110,66 @@ for (i in 1:nrow(outputCSV)) {
 outputCSV$FOOD_BIOMASS_UNCERTAINTY = 0.15
 outputCSV$METABOLIZABLE_ENERGY = outputCSV$TME * 1000
 outputCSV$TME <- NULL
+outputCSV$METABOLIZABLE_ENERGY_UNCERTAINTY = 0.05
+outputCSV$ENERGY_UNIT = ''
+outputCSV$ENERGY_UNIT[1] = 'kcal'
+
+
+# RATE_OF_CHANGE_RESERVE
+outputCSV$RATE_OF_CHANGE_RESERVE = ''
+outputCSV$CARRYING_CAPACITY = ''
+i = 0
+for (i in 1:length(forage_time_vector)) {
+  outputCSV$RATE_OF_CHANGE_RESERVE[i] = 0
+  outputCSV$CARRYING_CAPACITY[i] = 0
+}
+colnames(outputCSV)[colnames(outputCSV)=="DECOMP"] = "RATE_OF_CHANGE_AVAILABLE"
+outputCSV$V2 <- NULL
+outputCSV$V3 <- NULL
+outputCSV$V4 <- NULL
+
+#Add guild info
+outputCSV$N_FORAGING_GUILDS = ''
+outputCSV$N_FORAGING_GUILDS[1] = length(guilds)
+outputCSV$FORAGING_GUILD_NAME = ''
+i=0
+for (i in 1:length(guilds)){
+  outputCSV$FORAGING_GUILD_NAME[i] = guilds[i]
+}
+
+# Handle multiple forage_type_preferences by guild.  Currently setting all preferences equal.
+i = 0
+for (i in 1:length(guilds)) {
+  newvar = paste("forage_type_pref", toString(i), sep="")
+  outputCSV[, newvar] = ''
+  a = 0
+  for (a in 1:nrow(outputCSV)) {
+    outputCSV[a-1, newvar]= 1/nrow(outputCSV)
+  }
+}
+
+# Handles guild population columns.  This could be done above but keeping separate for ease of editing later.
+outputCSV$TIME_VECTOR_POP = ''
+i=0
+for (i in 1:length(popvector)) {
+  outputCSV$TIME_VECTOR_POP[i] = popvector[i]
+}
+
+i = 1
+for (i in 1:length(guilds)) {
+  tempvar = paste("guildpop", toString(i),sep="")
+  stopifnot(length(popvector)==length(get(paste("guildpop", toString(i),sep=""))))
+  newvar = paste("population_vector", toString(i), sep="")
+  outputCSV[, newvar] = ''
+  a = 0
+  for (a in 1:length(get(paste("guildpop", toString(i),sep="")))) {
+    outputCSV[a-1, newvar]= get(paste("guildpop", toString(i),sep=""))[a]
+  }
+}
+
+
+#######################
+
 
 #Reorder columns.  Will have to use variable
 outputCSV = outputCSV[c("N_FORAGE_TYPES", "FORAGE_TYPE_NAME", "TOTAL_AREA_BY_FORAGE_TYPE", "AREA_UNIT", "TIME_VECTOR_FORAGE_TYPE", "FOOD_BIOMASS")]

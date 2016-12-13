@@ -1,14 +1,14 @@
-COVER,HRVST_KG_HA,UNHRVST_KG_HA,TME
-corn,150,5716,3.67
-millet,45,1500,2.61
-rice,80,5240,3.34
-sorghum,150,3811,3.49
-soybeans,60,1334,2.65
-woody wetlands,79,79,2.76
-wrp,120,120,2.47
-hardwoods,79,79,2.76
-milo,150,3811,3.49
-moist-soil,600,600,2.47
-shrub swamp,0,0,0
-grassycorn,637,2029,3.39
-grassymilo,637,1553,3.34
+COVER,HRVST_KG_HA,UNHRVST_KG_HA,TME,DECOMP
+corn,150,5716,3.67,0.00465
+millet,45,1500,2.61,0.004777777
+rice,80,5240,3.34,0.00213
+sorghum,150,3811,3.49,0.003222222
+soybeans,60,1334,2.65,0.01083
+woody wetlands,79,79,2.76,0.000037
+wrp,120,120,2.47,0.000544175
+hardwoods,79,79,2.76,0.000037
+milo,150,3811,3.49,0.003222222
+moist-soil,600,600,2.47,0.002992857
+shrub swamp,0,0,0,0
+grassycorn,637,2029,3.39,0.004155357
+grassymilo,637,1553,3.34,0.004155357
