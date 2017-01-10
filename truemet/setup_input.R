@@ -190,11 +190,12 @@ outputCSV$DEE_UNCERTAINTY[1] = 0.05
 
 outputCSV$POP_UNCERTAINTY = ''
 outputCSV$POP_UNCERTAINTY[1] = 0.05
-#######################
+
 outputCSV$COVER_TYPE = NULL
 
-#Reorder columns.  Will have to use variable
-
+#Change order of a column
+col_idx = grep("N_FORAGE_TYPES", names(outputCSV))
+outputCSV = outputCSV[, c(col_idx, (1:ncol(outputCSV))[-col_idx])]
 
 # Write out data
 write.csv(outputCSV, file=paste(workspace, "input_data_R_Test.csv", sep=""), quote=FALSE, row.names=FALSE)
