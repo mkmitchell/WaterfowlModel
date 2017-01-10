@@ -34,6 +34,9 @@ popvector = c(1, 16, 32, 47, 62, 77, 93, 108, 124, 139, 152, 167, 183, 210)
 # each guild should have it's own variable name followed by an incredmental number.  guildpop1, guildpop2, guildpop3
 guildpop1 = c(143170, 401889, 836745, 1539851, 2489874, 2748556, 3127486, 3329976, 3433648, 3393342, 1802482, 881385, 881385, 881385)
 
+# Daily energy expenditure of foraging guild
+dee = 294.35
+
 ############################################################################
 
 # Read in data
@@ -58,16 +61,22 @@ combined$Z_RED_OAK_[is.na(combined$Z_RED_OAK_)] <- 0
 # If ST_FED is null input Private
 combined$ST_FED <- sub("^$", "Private", combined$ST_FED)
 
+# If ST_FED is private and Z_HARVESTE == 1 make it 100
+combined$Z_HARVESTE = ifelse((combined$ST_FED == "Private") & (combined$Z_HARVESTE == 1), 100, combined$Z_HARVESTE)
+
+# IF ST_FED is private and cover is woody wetlands set z_red_oak to 20
+combined$Z_RED_OAK_ = ifelse((combined$ST_FED == "Private") & (combined$COVER_TYPE == "woody wetlands"), 20, combined$Z_RED_OAK_)
+
 # Calculate woody wetlands
-combined$KG_HA=((combined$HECTARES*(combined$Z_HARVESTE*0.01)*combined$HRVST_KG_HA))+((1-combined$Z_HARVESTE*0.01)*combined$HECTARES*combined$UNHRVST_KG_HA)
-combined$KG_HA= ifelse(combined$COVER_TYPE == "woody wetlands", combined$HECTARES * (combined$Z_RED_OAK_ * 1.2405 + 41.619), combined$KG_HA)
+combined$KG_HA=(((combined$HECTARES*(combined$Z_HARVESTE*0.01)*combined$HRVST_KG_HA))+((1-combined$Z_HARVESTE*0.01)*combined$HECTARES*combined$UNHRVST_KG_HA))/combined$HECTARES
+combined$KG_HA= ifelse(combined$COVER_TYPE == "woody wetlands", combined$Z_RED_OAK_ * 1.2405 + 41.619, combined$KG_HA)
 
 # Create new habitat type that takes the form (STATE_ST_FED_COVER_TYPE)
 combined$COVER = with(combined, paste0(combined$STATE,"_", combined$ST_FED, "_", combined$COVER_TYPE))
 
 # Get weighted mean by habitat type
 outputCSV = ddply(combined, ~combined$COVER, function (x) weighted.mean(x$KG_HA, x$HECTARES/sum(x$HECTARES)))
-colnames(outputCSV)[colnames(outputCSV)=="V1"] = "FOOD_BIOMASS"
+outputCSV$N_FORAGE_TYPES = ''
 colnames(outputCSV)[colnames(outputCSV)=="combined$COVER"] = "FORAGE_TYPE_NAME"
 testsum = ddply(combined, ~combined$COVER, summarize, "TOTAL_AREA_BY_FORAGE_TYPE" = sum(HECTARES))
 colnames(testsum)[colnames(testsum)=="combined$COVER"] = "FORAGE_TYPE_NAME"
@@ -75,8 +84,7 @@ outputCSV = merge(outputCSV, testsum, by.x = "FORAGE_TYPE_NAME")
 
 #Setup data columns and format
 # N_FORAGE_TYPE
-outputCSV$N_FORAGE_TYPES = c(nrow(outputCSV))
-outputCSV$N_FORAGE_TYPES = ''
+#outputCSV$N_FORAGE_TYPES = c(nrow(outputCSV))
 outputCSV$N_FORAGE_TYPES[1] = nrow(outputCSV)
 
 # AREA_UNIT
@@ -102,11 +110,14 @@ for (i in 1:nrow(outputCSV)) {
   a = 0
   for (a in 2:4) {
     tempvar = paste("V", toString(a), sep="")
-    outputCSV[a-1, newvar]= outputCSV[i, tempvar]
+    outputCSV[a-1, newvar]= outputCSV[i, tempvar] * 0.01 * outputCSV$TOTAL_AREA_BY_FORAGE_TYPE[i]
   }
 }
 
 #Add additional static columns
+#colnames(outputCSV)[colnames(outputCSV)=="V1"] = "FOOD_BIOMASS"
+outputCSV$FOOD_BIOMASS = outputCSV$V1
+outputCSV$V1 = NULL
 outputCSV$FOOD_BIOMASS_UNCERTAINTY = 0.15
 outputCSV$METABOLIZABLE_ENERGY = outputCSV$TME * 1000
 outputCSV$TME <- NULL
@@ -116,14 +127,13 @@ outputCSV$ENERGY_UNIT[1] = 'kcal'
 
 
 # RATE_OF_CHANGE_RESERVE
-outputCSV$RATE_OF_CHANGE_RESERVE = ''
+outputCSV$RATE_OF_CHANGE_RESERVE = 0
+outputCSV$RATE_OF_CHANGE_AVAILABLE = outputCSV$DECOMP * -1
 outputCSV$CARRYING_CAPACITY = ''
-i = 0
-for (i in 1:length(forage_time_vector)) {
-  outputCSV$RATE_OF_CHANGE_RESERVE[i] = 0
-  outputCSV$CARRYING_CAPACITY[i] = 0
-}
-colnames(outputCSV)[colnames(outputCSV)=="DECOMP"] = "RATE_OF_CHANGE_AVAILABLE"
+
+
+outputCSV$DECOMP = NULL
+outputCSV$RATE
 outputCSV$V2 <- NULL
 outputCSV$V3 <- NULL
 outputCSV$V4 <- NULL
@@ -144,7 +154,7 @@ for (i in 1:length(guilds)) {
   outputCSV[, newvar] = ''
   a = 0
   for (a in 1:nrow(outputCSV)) {
-    outputCSV[a-1, newvar]= 1/nrow(outputCSV)
+    outputCSV[a, newvar]= 1/nrow(outputCSV)
   }
 }
 
@@ -161,19 +171,30 @@ for (i in 1:length(guilds)) {
   stopifnot(length(popvector)==length(get(paste("guildpop", toString(i),sep=""))))
   newvar = paste("population_vector", toString(i), sep="")
   outputCSV[, newvar] = ''
-  a = 0
+  a = 1
   for (a in 1:length(get(paste("guildpop", toString(i),sep="")))) {
-    outputCSV[a-1, newvar]= get(paste("guildpop", toString(i),sep=""))[a]
+    outputCSV[a, newvar]= get(paste("guildpop", toString(i),sep=""))[a]
   }
 }
 
+# Handles daily energy expenditure
+outputCSV$TIME_VECTOR_DEE = outputCSV$TIME_VECTOR_POP
+outputCSV$DEE_guild1 = ''
+i=0
+for (i in 1:length(popvector)) {
+  outputCSV$DEE_guild1[i] = dee
+}
 
+outputCSV$DEE_UNCERTAINTY = ''
+outputCSV$DEE_UNCERTAINTY[1] = 0.05
+
+outputCSV$POP_UNCERTAINTY = ''
+outputCSV$POP_UNCERTAINTY[1] = 0.05
 #######################
-
+outputCSV$COVER_TYPE = NULL
 
 #Reorder columns.  Will have to use variable
-outputCSV = outputCSV[c("N_FORAGE_TYPES", "FORAGE_TYPE_NAME", "TOTAL_AREA_BY_FORAGE_TYPE", "AREA_UNIT", "TIME_VECTOR_FORAGE_TYPE", "FOOD_BIOMASS")]
 
 
 # Write out data
-write.csv(outputCSV, file=paste(workspace, "input_data_R_Test.csv", sep=""), quote=FALSE, row.names=TRUE)
+write.csv(outputCSV, file=paste(workspace, "input_data_R_Test.csv", sep=""), quote=FALSE, row.names=FALSE)
