@@ -15,7 +15,7 @@ library("dplyr")
 workspace = "D:/GIS/projects/Waterfowl model/truemet/"
 
 # Input ArcGIS Model csv file
-arcin = "Nov_15_16_table.csv"
+arcin = "WGCP_1_11_17.csv"
 # CSV for cover, kg_ha (harvested and unharvested), tme, and decomp
 coverin = "cover_values.csv"
 # Foraging time vector for each habitat type based on winter water periods.
@@ -127,7 +127,7 @@ outputCSV$ENERGY_UNIT[1] = 'kcal'
 
 
 # RATE_OF_CHANGE_RESERVE
-outputCSV$RATE_OF_CHANGE_RESERVE = 0
+outputCSV$RATE_OF_CHANGE_RESERVE = outputCSV$DECOMP * -1
 outputCSV$RATE_OF_CHANGE_AVAILABLE = outputCSV$DECOMP * -1
 outputCSV$CARRYING_CAPACITY = ''
 
@@ -198,4 +198,4 @@ col_idx = grep("N_FORAGE_TYPES", names(outputCSV))
 outputCSV = outputCSV[, c(col_idx, (1:ncol(outputCSV))[-col_idx])]
 
 # Write out data
-write.csv(outputCSV, file=paste(workspace, "input_data_R_Test.csv", sep=""), quote=FALSE, row.names=FALSE)
+write.csv(outputCSV, file=paste(workspace, "WGCP_input_data_R_Test.csv", sep=""), quote=FALSE, row.names=FALSE)
