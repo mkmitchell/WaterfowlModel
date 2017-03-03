@@ -194,18 +194,22 @@ for (i in 1:length(guilds)) {
 
 # Handles daily energy expenditure
 outputCSV$TIME_VECTOR_DEE = outputCSV$TIME_VECTOR_POP
-outputCSV$DEE_guild1 = ''
 i=0
-for (i in 1:length(popvector)) {
-  outputCSV$DEE_guild1[i] = dee[i]
+for (i in 1:length(guilds)) {
+  newvar = paste("DEE_guild", toString(i), sep="")
+  outputCSV[, newvar] = ''
+  for (a in 1:length(popvector)) {
+    outputCSV[a, newvar] = dee[i]
+  }
 }
 
 outputCSV$DEE_UNCERTAINTY = ''
-outputCSV$DEE_UNCERTAINTY[1] = 0.05
-
 outputCSV$POP_UNCERTAINTY = ''
-outputCSV$POP_UNCERTAINTY[1] = 0.05
 
+for (i in 1:length(guilds)) {
+  outputCSV$POP_UNCERTAINTY[i] = 0.05
+  outputCSV$DEE_UNCERTAINTY[i] = 0.05  
+}
 outputCSV$COVER_TYPE = NULL
 
 #Change order of a column
