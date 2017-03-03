@@ -12,7 +12,7 @@ library("dplyr")
 ############################################################################
 # Variable designiation
 # Workspace directory
-workspace = "D:/GIS/projects/Waterfowl model/truemet/"
+workspace = "C:/GIS/projects/Waterfowl model/truemet/"
 
 # Input ArcGIS Model csv file
 arcin = "WGCP_1_11_17.csv"
@@ -25,17 +25,32 @@ foragetimein = "forage_time_vector.csv"
 forage_time_vector = c(1, 105, 210)
 
 # List of foraging guilds by name
-guilds = c("Dabbling Ducks")
+guilds = c("Dabbling Ducks", "Wood Ducks")
 
 # Time vector for for guild populations
 popvector = c(1, 16, 32, 47, 62, 77, 93, 108, 124, 139, 152, 167, 183, 210)
 
 # A population curve matching the length of the population vector
-# each guild should have it's own variable name followed by an incredmental number.  guildpop1, guildpop2, guildpop3
-guildpop1 = c(12982, 38872, 75874, 13961, 225778, 265850, 283595, 322087,322087,322087, 311358, 266676, 163446, 85250)
+# each guild should have it's own list in this list of lists!
+guildpop = list(list(78818, 236005, 460657, 915442, 1370774, 1614065, 1721801, 1955499, 1955499, 1955499, 1890360, 1619080, 992336, 517582),list(32573, 97533, 190373, 378321, 566494, 667037, 711561, 808140, 808140, 808140, 781220, 669110, 410098, 213899))
 
 # Daily energy expenditure of foraging guild
-dee = 294.35
+dee = list(276.1, 221.4)
+
+#Check that popvector, guildpop, and dee are correct lengths
+if (length(guildpop) != length(guilds)) {
+  stop("Guild list length doesn't equal guild population list length")
+}
+#Check that popvector, guildpop, and dee are correct lengths
+if (length(guildpop) != length(dee)) {
+  stop("Guild list length doesn't equal dee list length")
+}
+for (i in 1:length(guildpop)){
+    if (length(guildpop[[i]]) != length(popvector)){
+      stop(paste("Guild  population length of", i,"doesn't equal population length", collapse = " "))
+    }
+}
+
 
 ############################################################################
 
@@ -167,13 +182,13 @@ for (i in 1:length(popvector)) {
 
 i = 1
 for (i in 1:length(guilds)) {
-  tempvar = paste("guildpop", toString(i),sep="")
-  stopifnot(length(popvector)==length(get(paste("guildpop", toString(i),sep=""))))
+  #tempvar = paste("guildpop[[", toString(i),"]]",sep="")
+  stopifnot(length(popvector)==length(guildpop[[1]]))#(get(paste("guildpop[[", toString(i),"]]",sep=""))))
   newvar = paste("population_vector", toString(i), sep="")
   outputCSV[, newvar] = ''
   a = 1
-  for (a in 1:length(get(paste("guildpop", toString(i),sep="")))) {
-    outputCSV[a, newvar]= get(paste("guildpop", toString(i),sep=""))[a]
+  for (a in 1:length(guildpop[[1]])){#get(paste("guildpop[[", toString(i),"]]", sep="")))) {
+    outputCSV[a, newvar]= guildpop[[i]][[a]]
   }
 }
 
@@ -182,7 +197,7 @@ outputCSV$TIME_VECTOR_DEE = outputCSV$TIME_VECTOR_POP
 outputCSV$DEE_guild1 = ''
 i=0
 for (i in 1:length(popvector)) {
-  outputCSV$DEE_guild1[i] = dee
+  outputCSV$DEE_guild1[i] = dee[i]
 }
 
 outputCSV$DEE_UNCERTAINTY = ''
