@@ -173,6 +173,25 @@ for (i in 1:length(guilds)) {
   }
 }
 
+###############################
+# SPECIFIC FOR WOOD DUCKS
+ct = table(outputCSV$COVER_TYPE)
+woody = ct[names(ct)=="woody wetlands"]
+ms = ct[names(ct)=="moist-soil"]
+wrp = ct[names(ct)=="wrp"]
+shrub = ct[names(ct)=="shrub swamp"]
+totalcount = woody+ms+wrp+shrub
+
+i = 0
+for (i in 1:nrow(outputCSV)) {
+  if (outputCSV$COVER_TYPE[i] == "woody wetlands" | outputCSV$COVER_TYPE[i] == "moist-soil" | outputCSV$COVER_TYPE[i] == "wrp" | outputCSV$COVER_TYPE[i] == "shrub swamp"){
+    outputCSV$forage_type_pref2[i] =  1/totalcount
+  } else {
+    outputCSV$forage_type_pref2[i] =  0
+  }
+}
+###############################
+
 # Handles guild population columns.  This could be done above but keeping separate for ease of editing later.
 outputCSV$TIME_VECTOR_POP = ''
 i=0
