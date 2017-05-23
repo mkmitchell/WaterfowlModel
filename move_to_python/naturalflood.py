@@ -23,7 +23,7 @@ wrp = "wrp"
 
 arcpy.env.overwriteOutput = True;
 # Setup model specifics
-def runModel (region, workspace, gdb):
+def naturalflood (region, workspace, gdb):
 
 	gdb = os.path.join(workspace, gdb)
 	scratchgdb = os.path.join(workspace, region + "_scratch.gdb")
@@ -221,42 +221,6 @@ def runModel (region, workspace, gdb):
 ##
 ### Process: Feature Class to Feature Class
 ##arcpy.FeatureClassToFeatureClass_conversion(TempClip_MultipartToSinglepa__6_, Workspace, "Natural_flood.shp", "ACRES >= 1 AND COVER_TYPE <> ''", "MANAGE \"MANAGE\" true true false 2 Short 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,MANAGE,-1,-1;BASIN__HUC \"BASIN__HUC\" true true false 29 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,BASIN__HUC,-1,-1;ACRES \"ACRES\" true true false 4 Double 3 18 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,ACRES,-1,-1;WATERSHED \"WATERSHED\" true true false 45 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,GAUGE,-1,-1;STATE \"STATE\" true true false 2 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,STATE_ABBR,-1,-1;Z_RED_OAK_ \"Z_RED_OAK_\" true true false 8 Double 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,Z_RED_OAK_,-1,-1;HABITAT_TY \"HABITAT_TY\" true true false 16 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,HABITAT_TY,-1,-1;Z_HARVESTE \"Z_HARVESTE\" true true false 8 Double 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,Z_HARVESTE,-1,-1;MANAGING_A \"MANAGING_A\" true true false 255 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,MANAGING_A,-1,-1;COMMON_NAM \"COMMON_NAM\" true true false 100 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,COMMON_NAM,-1,-1;PROTECTION \"PROTECTION\" true true false 20 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,PROTECTION,-1,-1;SEEDINDEX \"SEEDINDEX\" true true false 8 Double 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,SEEDINDEX,-1,-1;WTRCNTRL \"WTRCNTRL\" true true false 5 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,WTRCNTRL,-1,-1;PUMP \"PUMP\" true true false 5 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,PUMP,-1,-1;REF_HAB \"REF_HAB\" true true false 5 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,REF_HAB,-1,-1;REFHABAC \"REFHABAC\" true true false 8 Double 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,REFHABAC,-1,-1;MANAGEMENT \"MANAGEMENT\" true true false 100 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,MANAGEMENT,-1,-1;FUNCTIONAL \"FUNCTIONAL\" true true false 1 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,FUNCTIONAL,-1,-1;DEDCALC \"DEDCALC\" true true false 4 Float 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,DEDCALC,-1,-1;OWNER \"OWNER\" true true false 20 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,OWNER,-1,-1;COVER_TYPE \"COVER_TYPE\" true true false 255 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,COVER_TYPE,-1,-1", "")
-
-def main(argv):
-   aoi = ''
-   inworkspace = ''
-   ingdb = ''
-   try:
-      opts, args = getopt.getopt(argv,"hr:w:g:",["region=","workspace="])
-   except getopt.GetoptError:
-           print 'naturalflood.py -r <MAV or WGCP> -w <workspace folder where geodatabases should reside> -g <geodatabase name>'
-           sys.exit(2)
-   for opt, arg in opts:
-      if opt == '-h':
-         print 'naturalflood.py -r <MAV or WGCP> -w <workspace folder where geodatabases should reside> -g <geodatabase name>'
-         sys.exit()
-      elif opt in ("-r", "--region"):
-         aoi = arg
-         if aoi.lower() not in ("mav", "wgcp"):
-                 print 'Region is incorrect'
-                 sys.exit(2)
-      elif opt in ("-w", "--workspace"):
-         inworkspace = arg
-         if not (os.path.exists(inworkspace)):
-                 print "Workspace GDB doesn't exist.  Please create it"
-                 sys.exit(2)
-      elif opt in ("-g", "--geodatabase"):
-         ingdb = arg
-         if not (os.path.exists(inworkspace)):
-                 print "GDB doesn't exist.  Please create it"
-                 sys.exit(2)
-   print 'Region of interest: ', aoi
-   print 'Workspace: ', inworkspace
-   print 'GDB: ', ingdb
-   runModel(aoi.lower(), inworkspace, ingdb)
-
-if __name__ == "__main__":
-   main(sys.argv[1:])
 
 # Local variables:
 ##rastercalc4_tif = "%Workspace%\\rastercalc4.tif"
