@@ -9,21 +9,31 @@
 
 # Import arcpy module
 import arcpy, os, sys, getopt
+from arcpy.sa import *
 
 
 # Required parameters
 # Name for the feature classes within the geodatabase
 mav = "mav"
 wgcp = "wgcp"
-flood = "flood"
-crops = "crops"
+flood = "Flood_scaled_68"
+crops = "cdl2015"
 publicinput = "Public_output"
 stateboundary = "state_boundaries"
 wrp = "wrp"
 
 arcpy.env.overwriteOutput = True;
+
+def checkField (shp, field):
+        fields = arcpy.ListFields(shp, field)
+        if len(fields) !=1:
+                return True
+        else:
+                return False
+
+        
 # Setup model specifics
-def naturalflood (region, workspace, gdb):
+def runFlood (region, workspace, gdb):
 
 	gdb = os.path.join(workspace, gdb)
 	scratchgdb = os.path.join(workspace, region + "_scratch.gdb")
@@ -66,208 +76,116 @@ def naturalflood (region, workspace, gdb):
         WRP = os.path.join(gdb, wrp)
         State = os.path.join(gdb, stateboundary)
         Natural_flood_shp = "D:\\GIS\\tools\\Waterfowl model\\wgcp_workspace\\Natural_flood.shp" # provide a default value if unspecified
-        MAV = aoi
         WorkspaceGDB = scratchgdb
+        try:
+                if arcpy.CheckExtension("Spatial") == "Available":
+                        arcpy.CheckOutExtension("Spatial")
+                else:
+                        print("Satial analyst license not available")
+                        sys.exit(2)
+        except Exception, e:
+                print("Can't acquire spatial analyst license: ", e)
+                sys.exit(2)
+        print "Starting analysis"
+        rasCrop = Raster(Crops)
+        print "Configuring crop type"
+        outCrop = Con((rasCrop == 1) | (rasCrop == 3) | (rasCrop == 4) | (rasCrop == 5) | (rasCrop == 29) | (rasCrop == 190), rasCrop, 0)
+        print "Converting crop raster to polygon.  This can take a very long time"
+        ############# SKIP
+        polyCrop = arcpy.RasterToPolygon_conversion(outCrop, os.path.join(scratchgdb, "polyCrop"), "NO_SIMPLIFY", "Value")
+        #print "Skipping polygon conversion for testing"
+        #polyCrop = os.path.join(scratchgdb, "polyCrop")
+        ############
+        selectCrop = arcpy.Select_analysis(polyCrop, os.path.join(scratchgdb, "sltCrop"), "gridcode > 0")
+        arcpy.AddField_management(selectCrop, "CLASS_NAME", "TEXT", "", "", "100", "", "NULLABLE", "NON_REQUIRED", "")
+        arcpy.CalculateField_management(selectCrop, "CLASS_NAME", "Calc( !gridcode!)", "PYTHON_9.3", "def Calc(grid):\\n  if (grid==1):\\n    return 'Corn'\\n  if (grid==3):\\n    return 'Rice'\\n  if (grid==4):\\n    return 'Sorghum'\\n  if (grid==5):\\n    return 'Soybeans'\\n  if (grid==29):\\n    return 'Millet'\\n  if (grid==190):\\n    return 'Woody Wetlands'")
+        ###### Also skipping for speed and testing
+        print "Import flood"
+        plyFlood = arcpy.RasterToPolygon_conversion(Raster(Flooding), os.path.join(scratchgdb, "flooding"), "NO_SIMPLIFY", "VALUE")
+        #plyFlood = os.path.join(scratchgdb, "flooding")
+        selectFlood = arcpy.Select_analysis(plyFlood, "in_memory/sltFlood", "\"GRIDCODE\" = 1")
+        print "Clipping flood to " + region
+        floodregion = arcpy.Clip_analysis(selectFlood, aoi, os.path.join(scratchgdb, "floodAOI"), "")
+        #floodregion = os.path.join(scratchgdb, "floodAOI")
+        #######
+        print "Adding some cool fields and doing calculations"
+        arcpy.AddGeometryAttributes_management(floodregion, "AREA;PERIMETER_LENGTH", "METERS", "SQUARE_METERS", "")
+        fields = arcpy.ListFields(floodregion, "SQUARE")
+        if len(fields) !=1:
+                arcpy.AddField_management(floodregion, "SQUARE", "DOUBLE", "", "2", "", "", "NULLABLE", "NON_REQUIRED", "")
+        arcpy.CalculateField_management(floodregion, "SQUARE", "!POLY_AREA! / (( !PERIMETER!/4)**2)", "PYTHON_9.3", "")
+        fields = arcpy.ListFields(floodregion, "MANAGE")
+        if len(fields) !=1:
+                arcpy.AddField_management(floodregion, "MANAGE", "SHORT", "1", "", "", "", "NULLABLE", "NON_REQUIRED", "")
+        arcpy.CalculateField_management(floodregion, "MANAGE", "Calc( !SQUARE!)", "PYTHON_9.3", "def Calc(square):\\n  if (square >= 0.40):\\n    return 1\\n  else:\\n    return 0")
+        print "Clipping crops with flood"
+        ### More testing
+        cropflood = arcpy.Clip_analysis(selectCrop, floodregion, os.path.join(scratchgdb, "crop_cpW_Flood"), "")
+        #cropflood = os.path.join(scratchgdb, "crop_cpW_Flood")
+        #####
+        print "Clipping state data with flood"
+        cleanState = arcpy.RepairGeometry_management(State, "DELETE_NULL")      
+        clipState = arcpy.Clip_analysis(cleanState, floodregion, "in_memory/stateflood", "")
+        print "Union state, wrp, flood, and crop data"
+        ### More testing
+        bigunion = arcpy.Union_analysis([WRP, floodregion, clipState, cropflood], os.path.join(scratchgdb, "All_Union"), "ALL", "", "GAPS")
+        #bigunion = os.path.join(scratchgdb, "All_Union")
+        print "Clip union output with flood"
+        unionclip = arcpy.Clip_analysis(bigunion, floodregion, os.path.join(scratchgdb, "Union_Clipped"), "")
+        #unionclip = os.path.join(scratchgdb, "Union_Clipped")
+        print "Lots of field adding and manipulation"
+        arcpy.CalculateField_management(unionclip, "MANAGE", "Calc( !MANAGE!, !Program_Na! )", "PYTHON_9.3", "def Calc(manage, wrp):\\n  if (wrp == 'WRP'):\\n    return 2\\n  else:\\n    return manage")
+        if checkField(unionclip, "Z_RED_OAK_"):
+                arcpy.AddField_management(unionclip, "Z_RED_OAK_", "DOUBLE", "", "", "", "", "NULLABLE", "NON_REQUIRED", "")
+        if checkField(unionclip, "HABITAT_TY"):
+                arcpy.AddField_management(unionclip, "HABITAT_TY", "TEXT", "", "", "16", "", "NULLABLE", "NON_REQUIRED", "")
+        if checkField(unionclip, "Z_HARVESTE"):
+                arcpy.AddField_management(unionclip, "Z_HARVESTE", "DOUBLE", "", "", "", "", "NULLABLE", "NON_REQUIRED", "")
+        if checkField(unionclip, "MANAGING_A"):
+                arcpy.AddField_management(unionclip, "MANAGING_A", "TEXT", "35", "", "", "", "NULLABLE", "NON_REQUIRED", "")
+        if checkField(unionclip, "COMMON_NAM"):
+                arcpy.AddField_management(unionclip, "COMMON_NAM", "TEXT", "", "", "100", "", "NULLABLE", "NON_REQUIRED", "")
+        if checkField(unionclip, "PROTECTION"):
+                arcpy.AddField_management(unionclip, "PROTECTION", "TEXT", "", "", "20", "", "NULLABLE", "NON_REQUIRED", "")
+        if checkField(unionclip, "SEEDINDEX"):
+                arcpy.AddField_management(unionclip, "SEEDINDEX", "DOUBLE", "", "", "", "", "NULLABLE", "NON_REQUIRED", "")
+        if checkField(unionclip, "WTRCNTRL"):
+                arcpy.AddField_management(unionclip, "WTRCNTRL", "TEXT", "", "", "5", "", "NULLABLE", "NON_REQUIRED", "")
+        if checkField(unionclip, "PUMP"):
+                arcpy.AddField_management(unionclip, "PUMP", "TEXT", "", "", "5", "", "NULLABLE", "NON_REQUIRED", "")
+        if checkField(unionclip, "REF_HAB"):
+                arcpy.AddField_management(unionclip, "REF_HAB", "TEXT", "", "", "5", "", "NULLABLE", "NON_REQUIRED", "")
+        if checkField(unionclip, "REFHABAC"):
+                arcpy.AddField_management(unionclip, "REFHABAC", "DOUBLE", "", "", "", "", "NULLABLE", "NON_REQUIRED", "")
+        arcpy.CalculateField_management(unionclip, "MANAGING_A", "'Private'", "PYTHON_9.3", "")
+        arcpy.CalculateField_management(unionclip, "HABITAT_TY", "Calc( !CLASS_NAME!)", "PYTHON_9.3", "def Calc(cover):\\n  ag = ['Corn', 'Millet', 'Sorghum', 'Rice', 'Soybeans']\\n  if (cover in ag):\\n    return 'Cropland'\\n  if (cover == 'Woody Wetlands'):\\n    return cover\\n  return ''\\n")
+        arcpy.CalculateField_management(unionclip, "HABITAT_TY", "Calc( !MANAGE!, !HABITAT_TY! )", "PYTHON_9.3", "def Calc(manage, hab):\\n  if(manage==2):\\n    return 'WRP'\\n  else:\\n    return hab")
+        arcpy.CalculateField_management(unionclip, "CLASS_NAME", "Calc( !MANAGE!, !CLASS_NAME! )", "PYTHON_9.3", "def Calc(manage, cover):\\n  if(manage==2):\\n    return 'WRP'\\n  else:\\n    return cover")
+        if checkField(unionclip, "MANAGEMENT"):
+                arcpy.AddField_management(unionclip, "MANAGEMENT", "TEXT", "", "", "100", "", "NULLABLE", "NON_REQUIRED", "")
+        arcpy.CalculateField_management(unionclip, "MANAGEMENT", "Calc( !MANAGE!)", "PYTHON_9.3", "def Calc(mng):\\n  if(mng == 0):\\n    return 'Natural Flood'\\n  elif(mng == 1):\\n    return 'Managed'\\n  elif(mng == 2):\\n    return 'WRP'")
+        if checkField(unionclip, "FUNCTIONAL"):
+                arcpy.AddField_management(unionclip, "FUNCTIONAL", "TEXT", "", "", "1", "", "NULLABLE", "NON_REQUIRED", "")
+        if checkField(unionclip, "DEDCALC"):
+                arcpy.AddField_management(unionclip, "DEDCALC", "FLOAT", "", "", "", "", "NULLABLE", "NON_REQUIRED", "")
+        if checkField(unionclip, "OWNER"):
+                arcpy.AddField_management(unionclip, "OWNER", "TEXT", "", "", "20", "", "NULLABLE", "NON_REQUIRED", "")
+        arcpy.CalculateField_management(unionclip, "OWNER", "'Private'", "PYTHON_9.3", "")
+        if checkField(unionclip, "COVER_TYPE"):
+                arcpy.AddField_management(unionclip, "COVER_TYPE", "TEXT", "", "", "", "", "NULLABLE", "NON_REQUIRED", "")
+        arcpy.CalculateField_management(unionclip, "COVER_TYPE", "!CLASS_NAME!", "PYTHON", "")
+        print "Time to convert to multipart"
+        singlepart = arcpy.MultipartToSinglepart_management(unionclip, os.path.join(scratchgdb, "SinglePart"))
+        print "Cleaning up and adding geometry"
+        arcpy.AddGeometryAttributes_management(singlepart, "AREA", "", "ACRES", "PROJCS['WGS_1984_UTM_Zone_15N',GEOGCS['GCS_WGS_1984',DATUM['D_WGS_1984',SPHEROID['WGS_1984',6378137.0,298.257223563]],PRIMEM['Greenwich',0.0],UNIT['Degree',0.0174532925199433]],PROJECTION['Transverse_Mercator'],PARAMETER['False_Easting',500000.0],PARAMETER['False_Northing',0.0],PARAMETER['Central_Meridian',-93.0],PARAMETER['Scale_Factor',0.9996],PARAMETER['Latitude_Of_Origin',0.0],UNIT['Meter',1.0]]")
+        arcpy.DeleteField_management(singlepart, "ACRES")
+        arcpy.AddField_management(singlepart, "ACRES", "DOUBLE", "18", "3", "", "", "NULLABLE", "NON_REQUIRED", "")
+        arcpy.CalculateField_management(singlepart, "ACRES", "!POLY_AREA!", "PYTHON_9.3", "")
+        print "Final output"
+        arcpy.FeatureClassToFeatureClass_conversion(singlepart, Workspace, "Natural_flood_" + region, "ACRES >= 1 AND COVER_TYPE <> ''", "MANAGE \"MANAGE\" true true false 2 Short 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,MANAGE,-1,-1;BASIN__HUC \"BASIN__HUC\" true true false 29 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,BASIN__HUC,-1,-1;ACRES \"ACRES\" true true false 4 Double 3 18 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,ACRES,-1,-1;WATERSHED \"WATERSHED\" true true false 45 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,GAUGE,-1,-1;STATE \"STATE\" true true false 2 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,STATE_ABBR,-1,-1;Z_RED_OAK_ \"Z_RED_OAK_\" true true false 8 Double 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,Z_RED_OAK_,-1,-1;HABITAT_TY \"HABITAT_TY\" true true false 16 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,HABITAT_TY,-1,-1;Z_HARVESTE \"Z_HARVESTE\" true true false 8 Double 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,Z_HARVESTE,-1,-1;MANAGING_A \"MANAGING_A\" true true false 255 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,MANAGING_A,-1,-1;COMMON_NAM \"COMMON_NAM\" true true false 100 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,COMMON_NAM,-1,-1;PROTECTION \"PROTECTION\" true true false 20 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,PROTECTION,-1,-1;SEEDINDEX \"SEEDINDEX\" true true false 8 Double 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,SEEDINDEX,-1,-1;WTRCNTRL \"WTRCNTRL\" true true false 5 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,WTRCNTRL,-1,-1;PUMP \"PUMP\" true true false 5 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,PUMP,-1,-1;REF_HAB \"REF_HAB\" true true false 5 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,REF_HAB,-1,-1;REFHABAC \"REFHABAC\" true true false 8 Double 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,REFHABAC,-1,-1;MANAGEMENT \"MANAGEMENT\" true true false 100 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,MANAGEMENT,-1,-1;FUNCTIONAL \"FUNCTIONAL\" true true false 1 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,FUNCTIONAL,-1,-1;DEDCALC \"DEDCALC\" true true false 4 Float 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,DEDCALC,-1,-1;OWNER \"OWNER\" true true false 20 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,OWNER,-1,-1;COVER_TYPE \"COVER_TYPE\" true true false 255 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,COVER_TYPE,-1,-1", "")
+        print("Everything good")
+        
 
 
 
-        # Set Geoprocessing environments
-        arcpy.env.workspace = WorkspaceGDB
-        # Process: Raster Calculator
-        arcpy.gp.RasterCalculator_sa("Con(((" + Crops + " == 1) | (" + Crops + "==3) | (" + Crops + "==4) | (" + Crops + "==5) | (" + Crops + "==29) | (" + Crops + "==190)) ," + Crops + ", 0)", rastercalc4_tif)
 
-
-##
-### Process: Raster to Polygon
-##arcpy.RasterToPolygon_conversion(rastercalc4_tif, RasterT_tif1_shp, "NO_SIMPLIFY", "Value")
-##
-### Process: Select (2)
-##arcpy.Select_analysis(RasterT_tif1_shp, RasterT_rasterc1_Select_shp, "gridcode > 0")
-##
-### Process: Add Field (14)
-##arcpy.AddField_management(RasterT_rasterc1_Select_shp, "CLASS_NAME", "TEXT", "", "", "100", "", "NULLABLE", "NON_REQUIRED", "")
-##
-### Process: Calculate Field (7)
-##arcpy.CalculateField_management(RasterT_rasterc1_Select__2_, "CLASS_NAME", "Calc( !gridcode!)", "PYTHON_9.3", "def Calc(grid):\\n  if (grid==1):\\n    return 'Corn'\\n  if (grid==3):\\n    return 'Rice'\\n  if (grid==4):\\n    return 'Sorghum'\\n  if (grid==5):\\n    return 'Soybeans'\\n  if (grid==29):\\n    return 'Millet'\\n  if (grid==190):\\n    return 'Woody Wetlands'")
-##
-### Process: Calculate Value
-##arcpy.CalculateValue_management("blah()", "def blah():\\n  import arcpy\\n  arcpy.env.overwriteOutput = True\\n  return True", "Boolean")
-##
-### Process: Raster to Polygon (2)
-##arcpy.RasterToPolygon_conversion(Flooding, tstflood, "NO_SIMPLIFY", "VALUE")
-##
-### Process: Select
-##arcpy.Select_analysis(tstflood, tstflood_Select_shp, "\"GRIDCODE\" = 1")
-##
-### Process: Clip
-##arcpy.Clip_analysis(tstflood_Select_shp, MAV, tstflood_Clip2, "")
-##
-### Process: Add Geometry Attributes
-##arcpy.AddGeometryAttributes_management(tstflood_Clip2, "AREA;PERIMETER_LENGTH", "METERS", "SQUARE_METERS", "")
-##
-### Process: Add Field
-##arcpy.AddField_management(tstflood_Clip__2_, "SQUARE", "DOUBLE", "", "2", "", "", "NULLABLE", "NON_REQUIRED", "")
-##
-### Process: Calculate Field
-##arcpy.CalculateField_management(tstflood_Select__3_, "SQUARE", "!POLY_AREA! / (( !PERIMETER!/4)**2)", "PYTHON_9.3", "")
-##
-### Process: Add Field (2)
-##arcpy.AddField_management(tstflood_Select_Select__3_, "MANAGE", "SHORT", "1", "", "", "", "NULLABLE", "NON_REQUIRED", "")
-##
-### Process: Calculate Field (2)
-##arcpy.CalculateField_management(tstflood_Select_Clip__4_, "MANAGE", "Calc( !SQUARE!)", "PYTHON_9.3", "def Calc(square):\\n  if (square >= 0.40):\\n    return 1\\n  else:\\n    return 0")
-##
-### Process: Clip (3)
-##arcpy.Clip_analysis(RasterT_rasterc1_Select__4_, tstflood_Select__6_, RasterT_rasterc1_Select_Clip, "")
-##
-### Process: Repair Geometry (2)
-##arcpy.RepairGeometry_management(State, "DELETE_NULL")
-##
-### Process: Clip (4)
-##arcpy.Clip_analysis(Output_Feature_Class, tstflood_Select__6_, State_boundaries_Clip, "")
-##
-### Process: Union (5)
-##arcpy.Union_analysis("'D:\\GIS\\tools\\Waterfowl model\\WGCP_input.gdb\\WRP' #;C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\RasterT_rasterc1_Select_Clip #;C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\State_boundaries_Clip #;%WorkspaceGDB%\\tstflood_Clip2 #", States_WGS84_N15_Union_Union_shp, "ALL", "", "GAPS")
-##
-### Process: Clip (2)
-##arcpy.Clip_analysis(States_WGS84_N15_Union_Union_shp, tstflood_Select__6_, TempClip_shp, "")
-##
-### Process: Calculate Field (3)
-##arcpy.CalculateField_management(TempClip_shp, "MANAGE", "Calc( !MANAGE!, !Program_Na! )", "PYTHON_9.3", "def Calc(manage, wrp):\\n  if (wrp == 'WRP'):\\n    return 2\\n  else:\\n    return manage")
-##
-### Process: Add Field (3)
-##arcpy.AddField_management(TempClip_shp__3_, "Z_RED_OAK_", "DOUBLE", "", "", "", "", "NULLABLE", "NON_REQUIRED", "")
-##
-### Process: Add Field (4)
-##arcpy.AddField_management(TempClip__3_, "HABITAT_TY", "TEXT", "", "", "16", "", "NULLABLE", "NON_REQUIRED", "")
-##
-### Process: Add Field (5)
-##arcpy.AddField_management(MOP_Table_dbf__3_, "Z_HARVESTE", "DOUBLE", "", "", "", "", "NULLABLE", "NON_REQUIRED", "")
-##
-### Process: Add Field (6)
-##arcpy.AddField_management(MOP_Table_dbf__4_, "MANAGING_A", "TEXT", "35", "", "", "", "NULLABLE", "NON_REQUIRED", "")
-##
-### Process: Add Field (7)
-##arcpy.AddField_management(MOP_Table_dbf__12_, "COMMON_NAM", "TEXT", "", "", "100", "", "NULLABLE", "NON_REQUIRED", "")
-##
-### Process: Add Field (8)
-##arcpy.AddField_management(Managed_private_table_dbf__4_, "PROTECTION", "TEXT", "", "", "20", "", "NULLABLE", "NON_REQUIRED", "")
-##
-### Process: Add Field (9)
-##arcpy.AddField_management(Managed_private_table_dbf__5_, "SEEDINDEX", "DOUBLE", "", "", "", "", "NULLABLE", "NON_REQUIRED", "")
-##
-### Process: Add Field (10)
-##arcpy.AddField_management(MOP_Table_dbf__8_, "WTRCNTRL", "TEXT", "", "", "5", "", "NULLABLE", "NON_REQUIRED", "")
-##
-### Process: Add Field (11)
-##arcpy.AddField_management(MOP_Table_dbf__9_, "PUMP", "TEXT", "", "", "5", "", "NULLABLE", "NON_REQUIRED", "")
-##
-### Process: Add Field (12)
-##arcpy.AddField_management(MOP_Table_dbf__10_, "REF_HAB", "TEXT", "", "", "5", "", "NULLABLE", "NON_REQUIRED", "")
-##
-### Process: Add Field (13)
-##arcpy.AddField_management(MOP_Table_dbf__11_, "REFHABAC", "DOUBLE", "", "", "", "", "NULLABLE", "NON_REQUIRED", "")
-##
-### Process: Calculate Field (6)
-##arcpy.CalculateField_management(MOP_Table_dbf__13_, "MANAGING_A", "'Private'", "PYTHON_9.3", "")
-##
-### Process: Calculate Field (8)
-##arcpy.CalculateField_management(MOP_Table_dbf__14_, "HABITAT_TY", "Calc( !CLASS_NAME!)", "PYTHON_9.3", "def Calc(cover):\\n  ag = ['Corn', 'Millet', 'Sorghum', 'Rice', 'Soybeans']\\n  if (cover in ag):\\n    return 'Cropland'\\n  if (cover == 'Woody Wetlands'):\\n    return cover\\n  return ''\\n")
-##
-### Process: Calculate Field (9)
-##arcpy.CalculateField_management(States_WGS84_N15_Union_Union1__2_, "HABITAT_TY", "Calc( !MANAGE!, !HABITAT_TY! )", "PYTHON_9.3", "def Calc(manage, hab):\\n  if(manage==2):\\n    return 'WRP'\\n  else:\\n    return hab")
-##
-### Process: Calculate Field (10)
-##arcpy.CalculateField_management(Managed_public_Table_dbf__2_, "CLASS_NAME", "Calc( !MANAGE!, !CLASS_NAME! )", "PYTHON_9.3", "def Calc(manage, cover):\\n  if(manage==2):\\n    return 'WRP'\\n  else:\\n    return cover")
-##
-### Process: Add Field (15)
-##arcpy.AddField_management(States_WGS84_N15_Union_Union1__4_, "MANAGEMENT", "TEXT", "", "", "100", "", "NULLABLE", "NON_REQUIRED", "")
-##
-### Process: Calculate Field (11)
-##arcpy.CalculateField_management(Managed_private_table_dbf__3_, "MANAGEMENT", "Calc( !MANAGE!)", "PYTHON_9.3", "def Calc(mng):\\n  if(mng == 0):\\n    return 'Natural Flood'\\n  elif(mng == 1):\\n    return 'Managed'\\n  elif(mng == 2):\\n    return 'WRP'")
-##
-### Process: Add Field (16)
-##arcpy.AddField_management(Managed_private_table_dbf__7_, "FUNCTIONAL", "TEXT", "", "", "1", "", "NULLABLE", "NON_REQUIRED", "")
-##
-### Process: Add Field (17)
-##arcpy.AddField_management(Managed_private_table_dbf__6_, "DEDCALC", "FLOAT", "", "", "", "", "NULLABLE", "NON_REQUIRED", "")
-##
-### Process: Add Field (18)
-##arcpy.AddField_management(Managed_private_table_dbf__10_, "OWNER", "TEXT", "", "", "20", "", "NULLABLE", "NON_REQUIRED", "")
-##
-### Process: Calculate Field (12)
-##arcpy.CalculateField_management(Managed_private_table_dbf__8_, "OWNER", "'Private'", "PYTHON_9.3", "")
-##
-### Process: Add Field (19)
-##arcpy.AddField_management(Managed_private_table_dbf__11_, "COVER_TYPE", "TEXT", "", "", "", "", "NULLABLE", "NON_REQUIRED", "")
-##
-### Process: Calculate Field (13)
-##arcpy.CalculateField_management(States_WGS84_N15_Union_Union1__5_, "COVER_TYPE", "!CLASS_NAME!", "PYTHON", "")
-##
-### Process: Multipart To Singlepart
-##arcpy.MultipartToSinglepart_management(States_WGS84_N15_Union_Union1__6_, TempClip_MultipartToSinglepa_shp)
-##
-### Process: Add Geometry Attributes (2)
-##arcpy.AddGeometryAttributes_management(TempClip_MultipartToSinglepa_shp, "AREA", "", "ACRES", "PROJCS['WGS_1984_UTM_Zone_15N',GEOGCS['GCS_WGS_1984',DATUM['D_WGS_1984',SPHEROID['WGS_1984',6378137.0,298.257223563]],PRIMEM['Greenwich',0.0],UNIT['Degree',0.0174532925199433]],PROJECTION['Transverse_Mercator'],PARAMETER['False_Easting',500000.0],PARAMETER['False_Northing',0.0],PARAMETER['Central_Meridian',-93.0],PARAMETER['Scale_Factor',0.9996],PARAMETER['Latitude_Of_Origin',0.0],UNIT['Meter',1.0]]")
-##
-### Process: Delete Field
-##arcpy.DeleteField_management(TempClip_MultipartToSinglepa__3_, "ACRES")
-##
-### Process: Add Field (20)
-##arcpy.AddField_management(TempClip_MultipartToSinglepa__2_, "ACRES", "DOUBLE", "18", "3", "", "", "NULLABLE", "NON_REQUIRED", "")
-##
-### Process: Calculate Field (4)
-##arcpy.CalculateField_management(TempClip_MultipartToSinglepa__5_, "ACRES", "[POLY_AREA]", "VB", "")
-##
-### Process: Feature Class to Feature Class
-##arcpy.FeatureClassToFeatureClass_conversion(TempClip_MultipartToSinglepa__6_, Workspace, "Natural_flood.shp", "ACRES >= 1 AND COVER_TYPE <> ''", "MANAGE \"MANAGE\" true true false 2 Short 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,MANAGE,-1,-1;BASIN__HUC \"BASIN__HUC\" true true false 29 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,BASIN__HUC,-1,-1;ACRES \"ACRES\" true true false 4 Double 3 18 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,ACRES,-1,-1;WATERSHED \"WATERSHED\" true true false 45 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,GAUGE,-1,-1;STATE \"STATE\" true true false 2 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,STATE_ABBR,-1,-1;Z_RED_OAK_ \"Z_RED_OAK_\" true true false 8 Double 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,Z_RED_OAK_,-1,-1;HABITAT_TY \"HABITAT_TY\" true true false 16 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,HABITAT_TY,-1,-1;Z_HARVESTE \"Z_HARVESTE\" true true false 8 Double 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,Z_HARVESTE,-1,-1;MANAGING_A \"MANAGING_A\" true true false 255 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,MANAGING_A,-1,-1;COMMON_NAM \"COMMON_NAM\" true true false 100 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,COMMON_NAM,-1,-1;PROTECTION \"PROTECTION\" true true false 20 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,PROTECTION,-1,-1;SEEDINDEX \"SEEDINDEX\" true true false 8 Double 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,SEEDINDEX,-1,-1;WTRCNTRL \"WTRCNTRL\" true true false 5 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,WTRCNTRL,-1,-1;PUMP \"PUMP\" true true false 5 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,PUMP,-1,-1;REF_HAB \"REF_HAB\" true true false 5 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,REF_HAB,-1,-1;REFHABAC \"REFHABAC\" true true false 8 Double 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,REFHABAC,-1,-1;MANAGEMENT \"MANAGEMENT\" true true false 100 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,MANAGEMENT,-1,-1;FUNCTIONAL \"FUNCTIONAL\" true true false 1 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,FUNCTIONAL,-1,-1;DEDCALC \"DEDCALC\" true true false 4 Float 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,DEDCALC,-1,-1;OWNER \"OWNER\" true true false 20 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,OWNER,-1,-1;COVER_TYPE \"COVER_TYPE\" true true false 255 Text 0 0 ,First,#,C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\TempClip,COVER_TYPE,-1,-1", "")
-
-# Local variables:
-##rastercalc4_tif = "%Workspace%\\rastercalc4.tif"
-##RasterT_tif1_shp = "%Workspace%\\RasterT_tif1.shp"
-##RasterT_rasterc1_Select_shp = "%Workspace%\\RasterT_rasterc1_Select.shp"
-##RasterT_rasterc1_Select__2_ = RasterT_rasterc1_Select_shp
-##RasterT_rasterc1_Select__4_ = RasterT_rasterc1_Select__2_
-##output_value = "true"
-##tstflood = "D:\\GIS\\tools\\Waterfowl model\\wgcp_workspace\\wgcp_gdb.gdb\\tstflood"
-##tstflood_Select_shp = "%Workspace%\\tstflood_Select.shp"
-##tstflood_Clip2 = "%WorkspaceGDB%\\tstflood_Clip2"
-##tstflood_Clip__2_ = tstflood_Clip2
-##tstflood_Select__3_ = tstflood_Clip__2_
-##tstflood_Select_Select__3_ = tstflood_Select__3_
-##tstflood_Select_Clip__4_ = tstflood_Select_Select__3_
-##tstflood_Select__6_ = tstflood_Select_Clip__4_
-##RasterT_rasterc1_Select_Clip = "C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\RasterT_rasterc1_Select_Clip"
-##Output_Feature_Class = State
-##State_boundaries_Clip = "C:\\Users\\mmitchell.DUCKS\\Documents\\ArcGIS\\Default.gdb\\State_boundaries_Clip"
-##States_WGS84_N15_Union_Union_shp = "%Workspace%\\States_WGS84_N15_Union_Union.shp"
-##TempClip_shp = "%Workspace%\\TempClip.shp"
-##TempClip_shp__3_ = TempClip_shp
-##TempClip__3_ = TempClip_shp__3_
-##MOP_Table_dbf__3_ = TempClip__3_
-##MOP_Table_dbf__4_ = MOP_Table_dbf__3_
-##MOP_Table_dbf__12_ = MOP_Table_dbf__4_
-##Managed_private_table_dbf__4_ = MOP_Table_dbf__12_
-##Managed_private_table_dbf__5_ = Managed_private_table_dbf__4_
-##MOP_Table_dbf__8_ = Managed_private_table_dbf__5_
-##MOP_Table_dbf__9_ = MOP_Table_dbf__8_
-##MOP_Table_dbf__10_ = MOP_Table_dbf__9_
-##MOP_Table_dbf__11_ = MOP_Table_dbf__10_
-##MOP_Table_dbf__13_ = MOP_Table_dbf__11_
-##MOP_Table_dbf__14_ = MOP_Table_dbf__13_
-##States_WGS84_N15_Union_Union1__2_ = MOP_Table_dbf__14_
-##Managed_public_Table_dbf__2_ = States_WGS84_N15_Union_Union1__2_
-##States_WGS84_N15_Union_Union1__4_ = Managed_public_Table_dbf__2_
-##Managed_private_table_dbf__3_ = States_WGS84_N15_Union_Union1__4_
-##Managed_private_table_dbf__7_ = Managed_private_table_dbf__3_
-##Managed_private_table_dbf__6_ = Managed_private_table_dbf__7_
-##Managed_private_table_dbf__10_ = Managed_private_table_dbf__6_
-##Managed_private_table_dbf__8_ = Managed_private_table_dbf__10_
-##Managed_private_table_dbf__11_ = Managed_private_table_dbf__8_
-##States_WGS84_N15_Union_Union1__5_ = Managed_private_table_dbf__11_
-##States_WGS84_N15_Union_Union1__6_ = States_WGS84_N15_Union_Union1__5_
-##TempClip_MultipartToSinglepa_shp = "%Workspace%\\TempClip_MultipartToSinglepa.shp"
-##TempClip_MultipartToSinglepa__3_ = TempClip_MultipartToSinglepa_shp
-##TempClip_MultipartToSinglepa__2_ = TempClip_MultipartToSinglepa__3_
-##TempClip_MultipartToSinglepa__5_ = TempClip_MultipartToSinglepa__2_
-##TempClip_MultipartToSinglepa__6_ = TempClip_MultipartToSinglepa__5_

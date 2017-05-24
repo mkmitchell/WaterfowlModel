@@ -16,7 +16,7 @@ stateboundary = "state_boundaries"
 
 arcpy.env.overwriteOutput = True;
 # Setup model specifics
-def finaloutput (region, workspace, gdb):
+def runWaterfowl (region, workspace, gdb):
 
 	gdb = os.path.join(workspace, gdb)
 	scratchgdb = os.path.join(workspace, region + "_scratch.gdb")

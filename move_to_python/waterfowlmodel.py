@@ -16,7 +16,22 @@ import finaloutput, naturalflood
 import arcpy, os, sys, getopt, datetime
 
 def printHelp():
-        print 'waterfowlmodel.py -m <waterfowl or flood> -r <MAV or WGCP> -w <workspace folder where geodatabases should reside> -g <geodatabase name>'
+        print '\n waterfowlmodel.py -m <waterfowl or flood> -r <MAV or WGCP> -w <workspace folder where geodatabases should reside> -g <geodatabase name>\n\n' \
+                '\n This is the main python script for running the wintering grounds waterfowl model for both the Mississippi Alluvial Valley and West Gulf Coastal Plain regions.\n'\
+                'It was written in python using the arcgis python libraries.  Initially it used ArcModels but they proved a bit limiting and not stable enough for future use.\n\n'\
+                '\nusage: waterfowlmodel \t[--help] [--model <model>] [--region <region>] \n'\
+                '\t\t\t[--workspace <path>] [--geodatabase <geodatabase>] \n\n' \
+                'These are the options used to initiate and run the waterfowl model propertly.\n\n' \
+                'Models\n' \
+                '\t waterfowl\t This does the main processing and requires all sub pieces to be complete\n' \
+                '\t flood\t\t This runs the flood model\n\n' \
+                'Region\n' \
+                '\t mav\t\t This option sets the model up to run the Mississippi Alluvial Valley region as the area of interest\n' \
+                '\t wgcp\t\t This option sets the model up to run the West Gulf Coastal Plain region as the area of interest\n\n' \
+                'Workspace\t\t The folder location where your geodatabase and scratch geodatabase will be write/read to/from\n' \
+                'Geodatabase\t\t The geodatabase name where your input datasets will be read from and final output written to\n\n' \
+                'Example:\n' \
+                'waterfowlmodel.py -m waterfowl -r mav -w c:\intputfolder -g modelgeodatabase.gdb\n'
         sys.exit(2)
 def main(argv):
    aoi = ''
@@ -28,7 +43,7 @@ def main(argv):
    except getopt.GetoptError:
            printHelp()
    for opt, arg in opts:
-      if opt == '-h':
+      if opt in ('-h', '--help'):
          printHelp()
       elif opt in ("-m", "--model"):
          model = arg
@@ -53,13 +68,16 @@ def main(argv):
 
    if len(opts) < 4:
         printHelp()
+        
+   print 'Model: ', model
    print 'Region of interest: ', aoi
    print 'Workspace: ', inworkspace
    print 'GDB: ', ingdb
 
    if model == 'waterfowl':
-           finaloutput(aoi.lower(), inworkspace, ingdb)
+           finaloutput.runWaterfowl(aoi.lower(), inworkspace, ingdb)
    elif model == 'flood':
-           naturalflood(aoi.lower(), inworkspace, ingdb)
+           naturalflood.runFlood(aoi.lower(), inworkspace, ingdb)
+           
 if __name__ == "__main__":
    main(sys.argv[1:])
