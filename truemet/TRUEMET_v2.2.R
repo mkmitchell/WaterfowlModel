@@ -32,10 +32,10 @@ library(sfsmisc)
 library(reshape2)
 
 # Set the working directory. Copy your working directory replacing backward slashes with forward slashes. 
-setwd("D:/GIS/projects/Waterfowl model/truemet")
+setwd("C:/GIS/projects/Waterfowl model/truemet")
 
 # Read in the data file. See TRUEMET User Guide for formatting the data file.
-X <- read.csv("input_data_R_Test.csv", header=TRUE) # Read from file
+X <- read.csv("MAV_input_data_R_8_2_2017.csv", header=TRUE) # Read from file
 H<-X$N_FORAGE_TYPES[1] # H = number of forage types = the total number of forage types whose data is available. 
 # A "forage type" is a food energy source that is defined by a fixed maximum extent (area), a forage type availability vector (representing the area that is accessible to foraging guilds over time), an energy density and a forage type preference value associated with each foraging guild.
 forages <-as.character(X$FORAGE_TYPE_NAME[1:H]) # Names of forage types (food energy types)

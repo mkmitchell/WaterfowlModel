@@ -12,10 +12,10 @@ library("dplyr")
 ############################################################################
 # Variable designiation
 # Workspace directory
-workspace = "D:/GIS/projects/Waterfowl model/truemet/"
+workspace = "C:/GIS/projects/Waterfowl model/truemet/"
 
 # Input ArcGIS Model csv file
-arcin = "WGCP_1_11_17.csv"
+arcin = "mav_Output_08_02_2017.csv"
 # CSV for cover, kg_ha (harvested and unharvested), tme, and decomp
 coverin = "cover_values.csv"
 # Foraging time vector for each habitat type based on winter water periods.
@@ -198,4 +198,4 @@ col_idx = grep("N_FORAGE_TYPES", names(outputCSV))
 outputCSV = outputCSV[, c(col_idx, (1:ncol(outputCSV))[-col_idx])]
 
 # Write out data
-write.csv(outputCSV, file=paste(workspace, "WGCP_input_data_R_Test.csv", sep=""), quote=FALSE, row.names=FALSE)
+write.csv(outputCSV, file=paste(workspace, "MAV_input_data_R_8_2_2017.csv", sep=""), quote=FALSE, row.names=FALSE)

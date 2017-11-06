@@ -15,7 +15,7 @@ library("dplyr")
 workspace = "C:/GIS/projects/Waterfowl model/truemet/"
 
 # Input ArcGIS Model csv file
-arcin = "WGCP_1_11_17.csv"
+arcin = "wgcp_Output_11_06_2017.csv"
 # CSV for cover, kg_ha (harvested and unharvested), tme, and decomp
 coverin = "cover_values.csv"
 # Foraging time vector for each habitat type based on winter water periods.
@@ -32,7 +32,8 @@ popvector = c(1, 16, 32, 47, 62, 77, 93, 108, 124, 139, 152, 167, 183, 210)
 
 # A population curve matching the length of the population vector
 # each guild should have it's own list in this list of lists!
-guildpop = list(list(78818, 236005, 460657, 915442, 1370774, 1614065, 1721801, 1955499, 1955499, 1955499, 1890360, 1619080, 992336, 517582),list(32573, 97533, 190373, 378321, 566494, 667037, 711561, 808140, 808140, 808140, 781220, 669110, 410098, 213899))
+#guildpop = list(list(78818, 236005, 460657, 915442, 1370774, 1614065, 1721801, 1955499, 1955499, 1955499, 1890360, 1619080, 992336, 517582),list(32573, 97533, 190373, 378321, 566494, 667037, 711561, 808140, 808140, 808140, 781220, 669110, 410098, 213899))
+guildpop = list(list(84764, 253808, 495407, 984499, 1474179, 1735823, 1851686, 2103013, 2103013, 2103013, 2032960, 1741216, 1067193, 55662),list(16097, 48198, 94077, 186956, 279945, 329631, 351633, 399360, 399360, 399360, 386057, 330655, 202659, 105703))
 
 # Daily energy expenditure of foraging guild
 dee = list(276.1, 221.4)
@@ -236,4 +237,4 @@ col_idx = grep("N_FORAGE_TYPES", names(outputCSV))
 outputCSV = outputCSV[, c(col_idx, (1:ncol(outputCSV))[-col_idx])]
 
 # Write out data
-write.csv(outputCSV, file=paste(workspace, "WGCP_input_data_R_Test.csv", sep=""), quote=FALSE, row.names=FALSE)
+write.csv(outputCSV, file=paste(workspace, substr(arcin, 0, nchar(arcin)-4), "_R_Output.csv", sep=""), quote=FALSE, row.names=FALSE)

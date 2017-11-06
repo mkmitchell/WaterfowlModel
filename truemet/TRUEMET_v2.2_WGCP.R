@@ -32,10 +32,11 @@ library(sfsmisc)
 library(reshape2)
 
 # Set the working directory. Copy your working directory replacing backward slashes with forward slashes. 
-setwd("D:/GIS/projects/Waterfowl model/truemet")
+setwd("C:/GIS/projects/Waterfowl model/truemet")
+Rin = "WGCP_Output_10_27_2017_R_Output.csv"
 
 # Read in the data file. See TRUEMET User Guide for formatting the data file.
-X <- read.csv("WGCP_input_data_R_Test.csv", header=TRUE) # Read from file
+X <- read.csv(Rin, header=TRUE) # Read from file
 H<-X$N_FORAGE_TYPES[1] # H = number of forage types = the total number of forage types whose data is available. 
 # A "forage type" is a food energy source that is defined by a fixed maximum extent (area), a forage type availability vector (representing the area that is accessible to foraging guilds over time), an energy density and a forage type preference value associated with each foraging guild.
 forages <-as.character(X$FORAGE_TYPE_NAME[1:H]) # Names of forage types (food energy types)
@@ -407,7 +408,7 @@ names(output)[(2*H+2+K+1)] <- "TAE_upper"
 names(output)[(2*H+2+K+2)] <- "TAE_lower"
 names(output)[(2*H+2+K+3)] <- "DD_upper"
 names(output)[(2*H+2+K+4)] <- "DD_lower"
-write.csv(file="result_WGCP.csv",output) # write data into file
+write.csv(file=paste(substr(Rin, 0, nchar(Rin)-4), "R_result.csv", sep=""),output) # write data into file
 head(output) # show the top of the output file
 # Create guild-specific plots w/ uncertainty
 
