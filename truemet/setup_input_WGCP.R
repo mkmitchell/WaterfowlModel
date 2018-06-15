@@ -12,7 +12,7 @@ library("dplyr")
 ############################################################################
 # Variable designiation
 # Workspace directory
-workspace = "C:/GIS/projects/Waterfowl model/truemet/"
+workspace = "D:/GIS/projects/Waterfowl model/truemet/"
 
 # Input ArcGIS Model csv file
 arcin = "wgcp_Output_11_06_2017.csv"
@@ -29,6 +29,9 @@ guilds = c("Dabbling Ducks", "Wood Ducks")
 
 # Time vector for for guild populations
 popvector = c(1, 16, 32, 47, 62, 77, 93, 108, 124, 139, 152, 167, 183, 210)
+
+# Open water correction factor
+opcorrection = 0.10
 
 # A population curve matching the length of the population vector
 # each guild should have it's own list in this list of lists!
@@ -89,6 +92,10 @@ combined$KG_HA= ifelse(combined$COVER_TYPE == "woody wetlands", combined$Z_RED_O
 
 # Create new habitat type that takes the form (STATE_ST_FED_COVER_TYPE)
 combined$COVER = with(combined, paste0(combined$STATE,"_", combined$OWNER, "_", combined$COVER_TYPE))
+
+# Multiply open aquatic by correction factor
+combined$ACRES= ifelse(combined$COVER_TYPE == "open-aquatic", combined$ACRES * opcorrection, combined$ACRES)
+combined$HECTARES= ifelse(combined$COVER_TYPE == "open-aquatic", combined$HECTARES * opcorrection, combined$HECTARES)
 
 # Get weighted mean by habitat type
 outputCSV = ddply(combined, ~combined$COVER, function (x) weighted.mean(x$KG_HA, x$HECTARES/sum(x$HECTARES)))
@@ -237,4 +244,4 @@ col_idx = grep("N_FORAGE_TYPES", names(outputCSV))
 outputCSV = outputCSV[, c(col_idx, (1:ncol(outputCSV))[-col_idx])]
 
 # Write out data
-write.csv(outputCSV, file=paste(workspace, substr(arcin, 0, nchar(arcin)-4), "_R_Output.csv", sep=""), quote=FALSE, row.names=FALSE)
+write.csv(outputCSV, file=paste(workspace, substr(arcin, 0, nchar(arcin)-4), "_R_Output_aquaticcorrection.csv", sep=""), quote=FALSE, row.names=FALSE)

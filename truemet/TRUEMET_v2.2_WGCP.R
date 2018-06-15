@@ -32,8 +32,8 @@ library(sfsmisc)
 library(reshape2)
 
 # Set the working directory. Copy your working directory replacing backward slashes with forward slashes. 
-setwd("C:/GIS/projects/Waterfowl model/truemet")
-Rin = "WGCP_Output_10_27_2017_R_Output.csv"
+setwd("D:/GIS/projects/Waterfowl model/truemet")
+Rin = "wgcp_Output_11_06_2017_R_Output_aquaticcorrection.csv"
 
 # Read in the data file. See TRUEMET User Guide for formatting the data file.
 X <- read.csv(Rin, header=TRUE) # Read from file
@@ -286,16 +286,26 @@ print(plot)
 ggsave(file="FigLA.jpg", plot=plot, width=6, height=4)
 # end plot for Figure LA
 
-# begin plot for Figure MS
-MS = da1[substr(da1$Forage_Type,1,2) == "MS",]
-plot <- ggplot(MS, aes(day,val)) + geom_area(aes(colour=Forage_Type,fill=Forage_Type),position='stack') +
-  ggtitle("Figure MS Available Energy by Forage Type") +
+
+# begin plot for Figure TX
+TX = da1[substr(da1$Forage_Type,1,2) == "TX",]
+plot <- ggplot(TX, aes(day,val)) + geom_area(aes(colour=Forage_Type,fill=Forage_Type),position='stack') +
+  ggtitle("Figure TX. Available Energy by Forage Type") +
   labs(x="Day",y=paste("Available Energy (",energy_unit,")",sep="")) 
 # +scale_y_continuous(labels = comma) # optional code to remove scientific notation
 print(plot)
-ggsave(file="FigMS.jpg", plot=plot, width=6, height=4)
-# end plot for Figure MS
+ggsave(file="FigTX.jpg", plot=plot, width=6, height=4)
+# end plot for Figure TX
 
+# begin plot for Figure OK
+OK = da1[substr(da1$Forage_Type,1,2) == "OK",]
+plot <- ggplot(OK, aes(day,val)) + geom_area(aes(colour=Forage_Type,fill=Forage_Type),position='stack') +
+  ggtitle("Figure OK. Available Energy by Forage Type") +
+  labs(x="Day",y=paste("Available Energy (",energy_unit,")",sep="")) 
+# +scale_y_continuous(labels = comma) # optional code to remove scientific notation
+print(plot)
+ggsave(file="FigOK.jpg", plot=plot, width=6, height=4)
+# end plot for Figure OK
 
 # Prepare data for Figure 4
 energy <- data.frame(cbind(days,TotalAvailEnergy,dailyDemand))
